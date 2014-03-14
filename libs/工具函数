@@ -1,0 +1,342 @@
+##############读取文件###################
+
+import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			private var file:FileReference = new FileReference();
+			private var parentPath:String = null;
+			private var fileName:String=null;
+			
+			/**
+			 * 读取要修改的文件
+			 **/
+			protected function readFile(event:MouseEvent):void
+			{
+				
+				var filter:FileFilter=new FileFilter("提示文件类型*.*", "*.*");
+				file.addEventListener(Event.SELECT,selectedFile);
+				file.browse([filter]);
+				
+				
+			}
+			/**
+			 * 选择文件
+			 * */
+			protected function selectedFile(e:Event):void{
+				if(e.target.size > 524288){
+					Alert.show("要读取的文件大于512KB，请重新选择文件");
+					return;
+				}
+				fileName = e.target.name;
+				file.load();
+				file.addEventListener(Event.COMPLETE,getData);
+				
+			}
+			/**
+			 * 获取文件
+			 * */
+			protected function getData(e:Event):void{
+				var dataArr:ByteArray = file.data;
+				var dataStr:String;
+				dataArr.position = 0;
+				dataStr = dataArr.readUTFBytes(dataArr.length);
+				content.text = dataStr;
+			}
+			/**
+			 * 
+			 * 修改完成后，将文本框中的内容保存到指定路径
+			 * */
+			protected function saveContentHandler(event:MouseEvent):void
+			{
+				if(content.text==null || content.text==""){
+					Alert.show("请先选择文件修改，然后保存");
+					return;
+				}
+				var sfile:FileReference = new FileReference();
+				sfile.save(content.text, fileName);
+				sfile.addEventListener(Event.COMPLETE,fileSaved);
+				
+			}
+			/**
+			 * 文件保存成功
+			 * */
+			protected function fileSaved(event:Event):void{
+				Alert.show("文件保存成功！");
+			}
+			
+	
+	################获取文件的绝对路径#############################
+	
+	 public static var currSwfUrl:String;  
+              
+          private function initApp():void{  
+                //写网络相关的项目时,就可以通过这个自动选择调用的服务器端程序了  
+                var doMain:String = this.parent.stage.loaderInfo.url;//注意此行和AS的写法略有不同  
+                var doMainArray:Array = doMain.split("/");  
+  
+                if (doMainArray[0] == "file:") {  
+                    if(doMainArray.length<=3){  
+                    //为处理本地系统返回的路径由“/”或“\”两种间隔组成的不同情况，而分别处理  
+                    currSwfUrl = doMainArray[2];  
+                    currSwfUrl = currSwfUrl.substring(0,currSwfUrl.lastIndexOf(currSwfUrl.charAt(2)));  
+                }else{  
+                    currSwfUrl = doMain;  
+                    currSwfUrl = currSwfUrl.substring(0,currSwfUrl.lastIndexOf("/"));  
+                }  
+            }else{  
+                    currSwfUrl = doMain;  
+                    currSwfUrl = currSwfUrl.substring(0,currSwfUrl.lastIndexOf("/"));  
+                }  
+                currSwfUrl += "/";  
+                  
+                trace("项目路径： "+ HelloFlex.currSwfUrl);  
+            }  
+            
+            
+            
+            
+            
+            
+#############################读取文件目录##############################
+
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx" creationComplete="windowedapplication1_creationCompleteHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			private var file:File;
+			protected function windowedapplication1_creationCompleteHandler(event:FlexEvent):void
+			{
+				this.removeEventListener(FlexEvent.CREATION_COMPLETE, windowedapplication1_creationCompleteHandler);
+				file = new File();
+				file.addEventListener(Event.SELECT, file_selectHandler);
+			}
+			//File的选择事件
+			protected function file_selectHandler(event:Event):void
+			{
+				var arr:Array = file.getDirectoryListing();
+				dg.dataProvider = arr;
+				this.status = file.nativePath;
+			}
+			//单击按钮
+			protected function btn_clickHandler(event:MouseEvent):void{
+				file.browseForDirectory("请选择一个文件夹");
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->	
+	</fx:Declarations>
+	
+	<s:Button id="btn" label="打开"  click="btn_clickHandler(event)"/>
+	<mx:DataGrid id="dg" width="100%" height="100%" y="30">
+		<mx:columns>
+			<mx:DataGridColumn headerText="文件名" dataField="name"/> 
+			<mx:DataGridColumn headerText="创建日期" dataField="creationDate"/>
+			<mx:DataGridColumn headerText="修改日期" dataField="modificationDate"/>
+			<mx:DataGridColumn headerText="文件夹" dataField="isDirectory"/>
+			<mx:DataGridColumn headerText="大小" dataField="size"/>
+			<mx:DataGridColumn headerText="类型" dataField="type"/>
+		</mx:columns>
+	</mx:DataGrid>
+	
+
+</s:WindowedApplication>
+
+
+
+###########################输入所有文件的路径###################################
+
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx" creationComplete="init()">
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+			private var sysFile:File;
+			private var FilrUrlArr:Array;
+			private var key:int;//递归结束标志
+			private var st:String="";
+			
+			private function init():void{
+				sysFile = new File();
+				sysFile.addEventListener(Event.SELECT,selectHandler);
+				FilrUrlArr = new Array();
+			}
+			
+			/**
+			 递归函数开始递归
+			 **/
+			private function getFileArr(_url:String=""):void{
+				key++;
+				if(_url!=""){
+					sysFile.url = _url;
+				}
+				var arr:Array = sysFile.getDirectoryListing();
+				var leg:int = arr.length;
+				for(var i:int=0;i<leg;i++){
+					var file:File = arr[i] as File;
+					if(file.isDirectory){  //如果是文件目录，文件夹
+						FilrUrlArr.push(file.url);
+						getFileArr(file.url);
+					}else{
+						FilrUrlArr.push(file.url);
+					}
+				}
+				key--;
+				if(key==0){//判断递归是否结束
+					Idone();
+				}
+			}
+			
+			/**
+			 开始执行获取文件地址的方法
+			 **/
+			private function selectHandler(event:Event):void{
+				getFileArr();
+			}
+			
+			
+			/**
+			 这里可以切一个断点看看结果，或者干脆用用trace
+			 **/
+			private function Idone():void{
+				//FilrUrlArr;
+				
+				for(var str:String in FilrUrlArr){
+					st+=FilrUrlArr[str]+"\n";
+				}
+				var myAlert:Alert = Alert.show(st,"提示"); 
+			}
+			
+			
+			/**
+			 开始执行按钮方法
+			 **/
+			private function clickHanlder(event:MouseEvent):void{
+				sysFile.browseForDirectory("请选择您的文件夹");
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+		
+		
+	</fx:Declarations>
+	<s:Button x="173" y="235" label="显示路径" click="clickHanlder(event)"/>
+	
+
+</s:WindowedApplication>
+
+
+
+
+######################################文件拖拽操作#############################
+
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx" creationComplete="initApp()">
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+
+			
+			private function initApp():void{      
+				this.addEventListener(NativeDragEvent.NATIVE_DRAG_ENTER,onDragIn);      
+				//通常做拖入文件的类型检查      
+				this.addEventListener(NativeDragEvent.NATIVE_DRAG_DROP,onDrop);      
+				//拖拽完成事件      
+			}      
+			private function onDragIn(event:NativeDragEvent):void{      
+				var transferable:Clipboard=event.clipboard;      
+				if(transferable.hasFormat(ClipboardFormats.FILE_LIST_FORMAT)&&event.clipboard.getData(ClipboardFormats.FILE_LIST_FORMAT)[0].nativePath.split(".")[1]=="jpg") {      
+					NativeDragManager.acceptDragDrop(this);      
+				}else {      
+					Alert.show("不接受的格式");      
+				}      
+			}      
+			private function onDrop(event:NativeDragEvent):void{      
+				var dropfiles:Array=event.clipboard.getData(ClipboardFormats.FILE_LIST_FORMAT) as Array;      
+				var currentFile:File=dropfiles[0];       
+				Alert.show("路径是"+currentFile.url,"提示"); 
+			}  
+			
+			
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+		
+		
+	</fx:Declarations>
+	<s:Button x="173" y="235" label="显示路径"/>
+	
+
+</s:WindowedApplication>
+
+
+####################################正则表达式 版本号替换############################
+
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx">
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+
+			
+			private function initApp():void{  
+				var date:Date=new Date();
+				var datenum:String=date.getTime()+""+(Math.floor(Math.random()*(10000-1000))+1000);
+				Alert.show(datenum+"","提示"); 
+				var scode:String=ImageCodes("background:url(as/sd.jpg?id=2343) no-repeat",datenum);
+				Alert.show(scode,"提示"); 
+				
+			}      
+			
+			private function ImageCodes(content:String,images_num:String):String{
+				
+				if(!content){
+					return "";
+				}
+				/**
+				 *参数说明
+				 *img_num_re 正则表达式 核心内容
+				 *tran_str   转换后的字符串
+				 */
+				//var img_num_re:RegExp=/(.*url\(+.*\.(png|jpg|gif)+)(\?id=(\d+))?(\)+)/mgi; 
+				var img_num_re:RegExp=/(.*\(+.*\.(png|jpg|gif)+)(\?id=(\d+))?(\)+)/mgi; 
+				var check:String="";
+				//Alert.show(check,"提示"); 
+				var tran_str:String=content.replace(img_num_re,"$1"+"?id="+images_num+"$5");
+				//Alert.show(tran_str,"transtr");
+				return tran_str;
+				
+				
+			}
+
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+		
+		
+	</fx:Declarations>
+	<s:Button x="608" y="556" label="显示路径" click="initApp()"/>
+	
+
+</s:WindowedApplication>
+
+ 

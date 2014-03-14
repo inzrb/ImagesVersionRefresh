@@ -1,0 +1,787 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009"
+					   xmlns:s="library://ns.adobe.com/flex/spark"
+					   xmlns:mx="library://ns.adobe.com/flex/mx"
+					   backgroundColor="#2C3E50" creationComplete="init()" showStatusBar="false"
+					   width.Main_State="700" height.Main_State="530">
+	<s:layout>
+		<s:VerticalLayout gap="80" horizontalAlign="center" verticalAlign="middle"
+						  gap.BatchCode_State="40"
+						  gap.SpecCode_State="40"/>
+	</s:layout>
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.ToolTipManager;
+			import mx.utils.ObjectUtil;
+			
+			/*初始化变量*/
+			//批量处理文件的文件对象
+			private var batch_file:File = new File();
+			private var temp_batch_file:File=new File();
+			//特定文件处理的文件对象
+			private var spec_file:File= new File();;
+			private var temp_spec_file:File=new File();
+			//初始化文件流 以便进行文件读写操作
+			private var file_steam:FileStream = new FileStream();
+			//文件路径输入
+			private var Bat_File_Url_Arr:Array=new Array();
+			//文件路径输入
+			private var Spec_File_Url_Arr:Array=new Array();
+			//递归结束标志
+			private var key:int;
+			//文件列表
+			private var bc_files_arrlist:ArrayCollection=new ArrayCollection();
+			private var sc_files_arrlist:ArrayCollection=new ArrayCollection();
+			//特定文件数组列表
+			private var spe_images_list:ArrayCollection=new ArrayCollection();
+			//是否已经选择文件夹
+			private var is_select_batch_document:Boolean=false;
+			private var is_select_spec_document:Boolean=false;
+			//url地址集合
+			private var url_string:String="";
+			/*是否只获取地址不对文件进行转换*/
+			private var tran_switch:Boolean=false;
+			/*是否进行批量转换 当为false时表示进行指定文件的转换*/
+			private var is_batch_tran:Boolean=true;
+			private var date:Date=new Date();
+			
+			/*初始化变量 绑定事件*/
+			private function init():void{
+				//初始化弹窗提示文字
+				Alert.yesLabel = "确定转换"; 
+				Alert.okLabel = "确定"; 
+				Alert.noLabel = "取消操作"; 
+				
+				
+				//初始化tooltip
+				initToolTip();
+				//页面绑定事件
+				addEvent();
+				/*绑定选择文件夹事件*/
+				
+				//取消自动执行
+				batch_file.addEventListener(Event.SELECT,function(event:Event):void{
+					batch_tran_filelists.dataProvider = bc_files_arrlist;
+					//将对象初始化
+					bc_files_arrlist.removeAll();
+					Bat_File_Url_Arr.length=0;
+					//不进行文件的处理，只获取路径地址
+					tran_switch=false;
+					is_batch_tran=true;
+					bc_native_path.text=batch_file.nativePath;
+					//temp_batch_file=batch_file;
+					//深复制batch_file对象到temp_batch_file中
+					//temp_batch_file=cloneObject(batch_file);
+					getFileArr(batch_file,Bat_File_Url_Arr);
+					is_select_batch_document=true;
+				});
+				
+				spec_file.addEventListener(Event.SELECT,function(event:Event):void{
+					//将对象初始化
+					bc_files_arrlist.removeAll();
+					//不进行文件的处理，只获取路径地址
+					tran_switch=false;
+					is_batch_tran=false;
+					
+					sc_native_path.text=spec_file.nativePath;
+					getFileArr(spec_file,Spec_File_Url_Arr);
+					temp_spec_file=spec_file;
+					is_select_spec_document=true;
+				});
+				
+				
+				//DEMO 测试用
+				//initApp();
+
+			}
+			
+			public static function cloneObject( _source:Object ):*{
+				if ( null==_source ) return null ;
+				var typeName:String = getQualifiedClassName( _source ) ;
+				trace( "需要拷贝的Class结构:" + typeName ) ;
+				var packageName:String = typeName.split("::")[1] ;
+				trace( "需要拷贝的Class类名:" + packageName ) ;
+				var type:Class = getDefinitionByName( typeName ) as Class ; //获取Class
+				//trace( type ) ;
+				registerClassAlias( packageName , type ) ; //注册Class
+				//====================================================
+				//开始复制对象
+				var copyData:ByteArray = new ByteArray() ;
+				copyData.writeObject( _source ) ;
+				copyData.position = 0 ;
+				return copyData.readObject() ;
+			}
+			
+			//初始化tooltip对象
+			private function initToolTip():void{
+				/*设置默认提示*/
+				var csd:CSSStyleDeclaration =StyleManager.getStyleManager(null).getStyleDeclaration('mx.controls.ToolTip');
+				csd.setStyle('backgroundColor',"#8BC3E2");
+				csd.setStyle("color","#2c3e50");
+				csd.setStyle("fontSize","12");
+				csd.setStyle("fontFamily","Microsoft YaHei");
+				
+				//设置tip提示显示和隐藏的动画
+				ToolTipManager.hideDelay = 2000;  
+				ToolTipManager.showEffect = fadeIn;  
+				ToolTipManager.hideEffect = fadeOut;  
+			}
+			
+			
+			
+			//初始化绑定页面事件
+			private function addEvent():void{
+				/*添加鼠标滑过效果*/
+				batch_code.addEventListener(MouseEvent.MOUSE_OVER,function(e:MouseEvent):void{
+					batch_code.setStyle("backgroundColor","#8BC3E2");
+				});
+				
+				batch_code.addEventListener(MouseEvent.MOUSE_OUT,function(e:MouseEvent):void{
+					batch_code.setStyle("backgroundColor","#2c3e50");
+				});
+				
+				spec_code.addEventListener(MouseEvent.MOUSE_OVER,function(e:MouseEvent):void{
+					spec_code.setStyle("backgroundColor","#8BC3E2");
+				});
+				
+				spec_code.addEventListener(MouseEvent.MOUSE_OUT,function(e:MouseEvent):void{
+					spec_code.setStyle("backgroundColor","#2c3e50");
+				});
+				
+				
+				/*批处理 绑定点击事件*/
+				batch_code.addEventListener(MouseEvent.CLICK,function(e:MouseEvent):void{
+					currentState='BatchCode_State';
+					//返回首页按钮滑过效果
+					bc_return_home.addEventListener(MouseEvent.MOUSE_OVER,function(e:MouseEvent):void{
+						bc_return_home.setStyle("backgroundColor","#8BC3E2");
+					});
+					bc_return_home.addEventListener(MouseEvent.MOUSE_OUT,function(e:MouseEvent):void{
+						bc_return_home.setStyle("backgroundColor","#2c3e50");
+					});
+					
+					//批处理文件确认按钮滑过效果
+					bc_confirm_tran.addEventListener(MouseEvent.MOUSE_OVER,function(e:MouseEvent):void{
+						bc_confirm_tran.setStyle("backgroundColor","#8BC3E2");
+					});
+					bc_confirm_tran.addEventListener(MouseEvent.MOUSE_OUT,function(e:MouseEvent):void{
+						bc_confirm_tran.setStyle("backgroundColor","#2c3e50");
+					});
+				});
+				
+				
+				/*spec_code绑定点击事件*/
+				spec_code.addEventListener(MouseEvent.CLICK,function(e:MouseEvent):void{
+					currentState='SpecCode_State';
+					//添加拖拽效果
+					spec_drag.addEventListener(NativeDragEvent.NATIVE_DRAG_ENTER,onDragIn);
+					//通常做拖入文件的类型检查      
+					spec_drag.addEventListener(NativeDragEvent.NATIVE_DRAG_DROP,onDrop);      
+					//拖拽完成事件 
+					
+					//指定文件确认按钮滑过效果
+					sc_return_home.addEventListener(MouseEvent.MOUSE_OVER,function(e:MouseEvent):void{
+						sc_return_home.setStyle("backgroundColor","#8BC3E2");
+					});
+					sc_return_home.addEventListener(MouseEvent.MOUSE_OUT,function(e:MouseEvent):void{
+						sc_return_home.setStyle("backgroundColor","#2c3e50");
+					});
+					
+					//绑定文件列表数据源
+					spc_file_list.dataProvider =spe_images_list;
+					
+					
+					//返回首页按钮滑过效果
+					sc_confirm_tran.addEventListener(MouseEvent.MOUSE_OVER,function(e:MouseEvent):void{
+						sc_confirm_tran.setStyle("backgroundColor","#8BC3E2");
+					});
+					sc_confirm_tran.addEventListener(MouseEvent.MOUSE_OUT,function(e:MouseEvent):void{
+						sc_confirm_tran.setStyle("backgroundColor","#2c3e50");
+					});
+				});	
+				
+				
+			}
+			
+			
+			private function initApp():void{  
+				//imageSpecTran("background: url(../../images/common/hcard_ico.png) no-repeat;_background: url(../../images/common/hcard_ico_ie.png?id=23423) no-repeat;","","");
+				//var temp_file:File=new File();
+				//temp_file.url="file:/c:/Users/游/Desktop/test/images/index_topic/module/";
+				//var path:String=temp_file.resolvePath("../../../images/index_topic/main_bg2.png").nativePath;
+				//Alert.show(path);
+				/*
+				var str:String="file:/c:/sd/a.jpg";
+				var str_index:int=str.lastIndexOf("/");
+				trace(str.lastIndexOf("/"));
+				trace(str.substring(0,str_index+1));
+				*/
+			}   
+			/****
+			 * 公用处理功能函数
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * */
+			
+			//获取目录文件文件的路径   传递参数默认为空    递归函数开始递归 
+			private function getFileArr(file:File,Img_Tran_File_Arr:Array,_url:String=""):void{
+				key++;
+				if(_url!=""){
+					file.url = _url;
+				}
+				//获取文件目录列表
+				var arr:Array = file.getDirectoryListing();
+				var leg:int = arr.length;
+				
+				//Alert.show("目录："+file.nativePath);
+				for(var i:int=0;i<leg;i++){
+					var f_list:File = arr[i] as File;
+					if(f_list.isDirectory){  //如果是文件目录，文件夹
+						//将目录放入到数组中，下面这句可以根据需要注释掉
+						//调用自己本身
+						getFileArr(file,Img_Tran_File_Arr,f_list.url);
+					}else{
+						//过滤文件名
+						if(f_list.type==".css"||f_list.type==".less"){
+							addItemToArr(f_list,tran_switch,is_batch_tran);
+						}
+					}
+				}
+				key--;
+				if(key==0){//判断递归是否结束
+					if(tran_switch){
+						fileVersionTranslate(Img_Tran_File_Arr);
+					}
+				}
+			}
+			
+			private function addItemToArr(file_li:File,tr_switch:Boolean,ib_tran:Boolean):void{
+				//将文件url地址放入到数组中
+				if(!tr_switch){
+					if(ib_tran){
+						Bat_File_Url_Arr.push(file_li.url);
+					}else{
+						Spec_File_Url_Arr.push(file_li.url);
+					}
+					
+				}
+				if(ib_tran){
+					bc_files_arrlist.addItem(file_li);
+				}else{
+					sc_files_arrlist.addItem(file_li);
+				}
+			}
+			
+			
+			/*通过文件地址数组读取所有文件*/
+			private function imgcodeFromFileUrlArr(Bat_File_AList:Array):void{
+				var date_num:String=date.getTime()+""+(Math.floor(Math.random()*(10000-1000))+1000);
+				for(var url:String in Bat_File_AList){
+					var temp_file:File = new File();
+					//获取文件的路径地址信息
+					temp_file.url = Bat_File_AList[url];
+					//Alert.show(temp_file.resolvePath("../../images/common/hcard_ico.png").nativePath,"路径");
+					//以只读方式打开文件
+					file_steam.open(temp_file, FileMode.READ);
+					//以UTF-8形式获取文件的内容
+					var file_con:String=file_steam.readUTFBytes(file_steam.bytesAvailable);
+					//对内容进行转码
+					file_con=imageCodeTran(file_con,date_num);
+					//以写方式打开文件
+					file_steam.open(temp_file, FileMode.WRITE);
+					//将转换后文件写入到原文件中
+					file_steam.writeUTFBytes(file_con);
+					//关闭文件流file_steam对象
+					file_steam.close();
+					
+					//textarea_id.text+=file_con;
+				}
+			}
+			
+			
+			/*通过文件地址数组读取所有文件*/
+			private function getContentFromFile(file:File):String{
+				
+				//以只读方式打开文件
+				file_steam.open(file, FileMode.READ);
+				//以UTF-8形式获取文件的内容
+				var file_con:String=file_steam.readUTFBytes(file_steam.bytesAvailable);
+				//关闭文件流file_steam对象
+				file_steam.close();
+				return file_con;
+			}
+			
+			
+			//批量文件刷版本号
+			private function imageCodeTran(content:String,images_num:String):String{
+				
+				if(!content){
+					return "";
+				}
+				
+				var date:Date=new Date();
+				var datenum:String=date.getTime()+""+(Math.floor(Math.random()*(10000-1000))+1000);
+				if(images_num==""){
+					images_num=datenum;
+				}
+				
+				
+				/**
+				 *参数说明
+				 *img_num_re 正则表达式 核心内容
+				 *tran_str   转换后的字符串
+				 */
+				//var img_num_re:RegExp=/(.*url\(+.*\.(png|jpg|gif)+)(\?id=(\d+))?(\)+)/mgi; 
+				//var img_num_re:RegExp=/([^;]*\.(png|jpg|gif)+)(\?id=(\d+))?/mgi; 
+				//var img_num_re:RegExp=/([^:;]*(url|src)+([^(]*.(png|jpg|gif)+))(\?id=(\d+))?(\)+)/mgi;
+				//var img_num_re:RegExp=/([^:;{]*(url|src)+([^{,]*.(png|jpg|gif)+))(\?id=(\d+))?(\)| \'|\")+/mgi;
+				//var img_num_re:RegExp=/([^';{\("]*.(png|jpg|gif)+)(\?id=(\d+))?(['"\)]+)/mgi;
+				var img_num_re:RegExp=/([0-9a-zA-Z-_'":]+.(png|jpg|gif)+)(\?id=(\d+))?(['"\)]+)/mgi;
+				//var img_num_re:RegExp=/(.*.(png|jpg|gif)+)(\?id=(\d+))?(['"\)]+)/mgi;  有BUG,不要用
+				var check:String="";
+				//Alert.show(check,"提示"); 
+				var tran_str:String=content.replace(img_num_re,"$1"+"?id="+images_num+"$5");
+				//Alert.show(tran_str,"transtr");
+				return tran_str;
+				
+				
+			}
+			
+			
+			/****
+			 * 批处理文件处理功能函数
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * */
+			
+			
+			//批量刷文件版本号 ...
+			private function clickForAllFileHanlder(event:MouseEvent):void{
+				//打开选择目录的对话框
+				batch_file.browseForDirectory("请选择要刷版本号的文件夹");
+			}
+			
+			//弹出提示框让用户确认是否转换
+			private function confirmBatchTran(event:MouseEvent):void{
+				if(!is_select_batch_document){
+					Alert.show("你还没有选择批处理文件的目录呢！","转换提示");
+				}else{
+					Alert.show("即将要对你选择目录下所有文件添加版，要继续吗?","转换提示",Alert.YES|Alert.NO,this,closeBatchAlertHandle);
+				}
+			}
+			
+			//确认框用户选择后处理
+			private function closeBatchAlertHandle(event:CloseEvent):void { 
+				if(event.detail==Alert.YES){
+					//对文件内容进行处理
+					tran_switch=true;
+					is_batch_tran=true;
+					fileVersionTranslate(Bat_File_Url_Arr);
+					Alert.show("转换成功"); 
+				}else if(event.detail==Alert.NO){
+					Alert.show("取消操作"); 
+				}
+				
+			}
+			
+			
+			//这里可以切一个断点看看结果，或者干脆用用trace
+			private function fileVersionTranslate(File_Ver_Tran_Arr:Array):void{
+				//Bat_File_Url_Arr;
+				
+				/*
+				for(var str:String in Bat_File_Url_Arr){
+					url_string+=Bat_File_Url_Arr[str]+"\n";
+				}
+				*/
+				imgcodeFromFileUrlArr(File_Ver_Tran_Arr);
+				//var myAlert:Alert = Alert.show(st,"提示"); 
+				//trace(url_string);
+			}
+			
+			
+			
+			
+			/****
+			 * 指定文件处理功能函数
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * 
+			 * */
+			
+			//指定文件刷版本号...
+			private function clickForSpecHanlder(event:MouseEvent):void{
+				//打开选择目录的对话框
+				spec_file.browseForDirectory("请选择要刷版本号的文件夹");
+			}
+			
+			//指定文件处理获取文件地址的方法
+			private function selectForSpecHandler(event:Event):void{
+				
+				//对文件内容进行处理
+				tran_switch=true;
+				is_batch_tran=false;
+				getFileArr(spec_file,Spec_File_Url_Arr);
+				sc_native_path.text=spec_file.nativePath;
+			}
+			
+			
+			
+			//当鼠标拖入的时候执行
+			private function onDragIn(event:NativeDragEvent):void{ 
+				NativeDragManager.dropAction = NativeDragActions.COPY;
+				var transferable:Clipboard=event.clipboard;     
+				var file_format:String=event.clipboard.getData(ClipboardFormats.FILE_LIST_FORMAT)[0].nativePath.split(".")[1];
+				if(transferable.hasFormat(ClipboardFormats.FILE_LIST_FORMAT)&&(file_format=="jpg"||file_format=="png"||file_format=="gif")) {      
+					NativeDragManager.acceptDragDrop(spec_drag);      
+				}else {      
+					Alert.show("你提供的图片格式不符合要求","版本号刷新工具错误提示");      
+				}      
+			}      
+			
+			//添加图片文件名列表到数组中
+			private function addFilterImagesToList(source_list:ArrayCollection,new_images_url:String):void{
+				
+				//Alert.show(new_images_name);
+				
+				var is_exist:Boolean=false;
+				if(source_list.toArray().length==0){
+					source_list.addItem(new_images_url);
+				}else{
+					
+					// 循环放入新的arraycollection中，已经存在则不进行重新添加
+					for each(var item:String in source_list){
+						if(item==new_images_url){
+							is_exist=true;
+							break;
+						}
+					}
+					if(!is_exist){
+						source_list.addItem(new_images_url);
+					}
+				}
+			}
+			
+			//当鼠标拖入到目标松开的时候执行
+			private function onDrop(event:NativeDragEvent):void{   
+				//获取拖入文件的数组
+				var dropfiles:Array=event.clipboard.getData(ClipboardFormats.FILE_LIST_FORMAT) as Array;
+				var date_num:String=date.getTime()+""+(Math.floor(Math.random()*(10000-1000))+1000);
+				
+				for(var i:int=0;i<dropfiles.length;i++){
+					var currentFile:File=dropfiles[i];       
+					//Alert.show("路径是"+currentFile.url,"提示"); 
+					addFilterImagesToList(spe_images_list,currentFile.nativePath);
+					//var file_con:String=getContentFromFile(currentFile);
+					//imageSpecTran(file_con,date_num,currentFile.name);
+				}
+				
+			}  
+			
+			
+			//弹出提示框让用户确认是否转换
+			private function confirmSpcTran(event:MouseEvent):void{
+				if(!is_select_spec_document){
+					Alert.show("你还没有选择要刷版本号处理的文件夹，请选择要刷版本号的文件目录，然后放入指定的图片文件","转换提示");
+				}else if(spe_images_list.toArray().length==0){
+					Alert.show("你还没有放入指定的图片文件，点击确定后将批量处理所有文件，要继续吗?","转换提示",Alert.YES|Alert.NO,this,closeAllSpcCodeAlertHandle);
+				}else{
+					Alert.show("即将要对文件添加指定图片的版本号，要继续吗?","转换提示",Alert.YES|Alert.NO,this,closeSpecAlertHandle);
+							
+				}
+			}
+			
+			//确认框用户选择后处理  对指定文件添加版本号
+			private function closeAllSpcCodeAlertHandle(event:CloseEvent):void { 
+				if(event.detail==Alert.YES){
+					//对文件内容进行处理
+					tran_switch=true;
+					is_batch_tran=true;
+					fileVersionTranslate(Spec_File_Url_Arr);
+					Alert.show("已经批量完成了版本号。"); 
+				}else if(event.detail==Alert.NO){
+					Alert.show("取消操作"); 
+				}
+				
+			}
+			
+			//确认框用户选择后进行批量文件添加版本号处理
+			private function closeSpecAlertHandle(event:CloseEvent):void { 
+				if(event.detail==Alert.YES){
+					//对文件内容进行处理
+					tran_switch=true;
+					is_batch_tran=false;
+					specFileVersionTranslate();
+					Alert.show("成功添加指定图片文件的版本号");  
+				}else if(event.detail==Alert.NO){
+					Alert.show("取消操作"); 
+				}
+				
+			}
+			
+			
+			//特定文件刷版本号  功能入口
+			private function imageSpecTran(content:String,images_num:String,img_abs_url:String,css_file_url:String):String{
+				//var ist_re:RegExp=/([^(;:\/]*.(png|jpg|gif)+)/mgi;
+				var ist_re:RegExp=/([0-9a-zA-Z-_.:\/]+.(png|jpg|gif)+)/mgi;
+				var Url_List:Array=new Array();
+				var Match_List:Array;
+				var tmp_url:String="";
+//				if(!content){
+//
+//				}
+				
+				var date:Date=new Date();
+				var datenum:String=date.getTime()+""+(Math.floor(Math.random()*(10000-1000))+1000);
+				if(images_num==""){
+					images_num=datenum;
+				}
+				Match_List=content.match(ist_re);
+				
+				var tran_content:String=content;
+				var temp_file:File = new File();
+				var dir_prex_index:int;
+				var temp_css_dir:String="";
+				var img_incss_url:String=""
+				for(var i:int=0;i<Match_List.length;i++){
+					/*去掉双括号
+					Alert.show(Match_List[i]);
+					tmp_str=Match_List[i].replace(/^\(/,"");
+					tmp_str=tmp_str.replace(/\)$/,"");
+					*/
+					tmp_url=Match_List[i];
+					//Alert.show("tmp_url="+tmp_url);
+					
+					
+					
+					
+					dir_prex_index=css_file_url.lastIndexOf("/");
+					temp_css_dir=css_file_url.substring(0,dir_prex_index+1);
+					//获取CSS文件的路径地址信息
+					temp_file.url = temp_css_dir;
+					//获取图片的实际路径
+					img_incss_url=temp_file.resolvePath(tmp_url).nativePath;
+					
+					
+					//Alert.show("tmp_url="+temp_file.url);
+					//Alert.show(img_abs_url+"---img_in_css="+img_incss_url);
+					if(img_abs_url==img_incss_url){
+						//Alert.show("img_incss_url="+img_incss_url+"||||tmp_url="+tmp_url);  
+						var ts_re:RegExp=new RegExp(tmp_url+"(\\?id=\\d+)?([\'\"\)]+)","mgi");
+						tran_content=tran_content.replace(ts_re,tmp_url+"?id="+images_num+"$2");
+					}
+					
+				}
+				return tran_content;
+
+			}
+			
+			private function specFileVersionTranslate():void{
+				var datenum:String=date.getTime()+""+(Math.floor(Math.random()*(10000-1000))+1000);
+				imgcodeFromFileUrlListAndImagesList(Spec_File_Url_Arr,spe_images_list,datenum);
+			}
+			
+			
+			
+			/*通过文件地址数组读取所有文件*/
+			private function imgcodeFromFileUrlListAndImagesList(SC_File_Url_AList:Array,image_list:ArrayCollection,date_num:String):void{
+				
+				for(var url:String in SC_File_Url_AList){
+					var temp_file:File = new File()
+					//获取文件的路径地址信息
+					temp_file.url = SC_File_Url_AList[url];
+					//Alert.show(temp_file.resolvePath("../../images/common/hcard_ico.png").nativePath,"路径");
+					//以只读方式打开文件
+					file_steam.open(temp_file, FileMode.READ);
+					//以UTF-8形式获取文件的内容
+					var file_con:String=file_steam.readUTFBytes(file_steam.bytesAvailable);
+					
+					file_con=replaceFileConFromImgList(file_con,image_list,date_num,SC_File_Url_AList[url]);
+					//以写方式打开文件
+					file_steam.open(temp_file, FileMode.WRITE);
+					//将转换后文件写入到原文件中
+					file_steam.writeUTFBytes(file_con);
+					//关闭文件流file_steam对象
+					file_steam.close();
+					
+					//textarea_id.text+=file_con;
+				}
+			}
+			
+			
+			private function replaceFileConFromImgList(file_con:String,re_image_list:ArrayCollection,date_num:String,css_file_url:String):String{
+				var Tmp_Imgs_list:Array=new Array();
+				Tmp_Imgs_list=re_image_list.toArray();
+				for(var i:int=0;i<Tmp_Imgs_list.length;i++){
+					//对内容进行转码
+					file_con=imageSpecTran(file_con,date_num,Tmp_Imgs_list[i],css_file_url);
+				}
+				return file_con;
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->	
+		<mx:Rotate id="rotate" />   
+		<mx:Zoom id="zoom" />
+		<mx:Fade id="fadeOut" duration="200" alphaFrom="1.0" alphaTo="0.0"/>
+		<mx:Fade id="fadeIn" duration="200" alphaFrom="0.0" alphaTo="1.0"/>
+	</fx:Declarations>
+	
+	<s:states>
+		<s:State name="Main_State"/>
+		<s:State name="BatchCode_State"/>
+		<s:State name="SpecCode_State"/>
+	</s:states>
+	<!--主页面内容-->
+	<s:Label color="#85C5AC" fontFamily="宋体" fontSize="14" fontWeight="bold" text="请选择你要使用的功能："
+			 color.BatchCode_State="#4AA3DD" text.BatchCode_State="批量刷版本号"
+			 color.Main_State="#4AA3DD"
+			 color.SpecCode_State="#4AA3DD" text.SpecCode_State="请选择文件夹目录，再拖拽文件到虚线框内"/>
+	<s:HGroup gap="50" verticalAlign="middle" id="iv_menu">
+		
+		
+		
+		<s:BorderContainer id="batch_code" backgroundColor="#2c3e50"  includeIn="Main_State" width="150" height="150" borderVisible="false"
+						   buttonMode="true" cornerRadius="5"
+						   mouseChildren="false" useHandCursor="true" toolTip="批量刷版本号">
+			<s:Image id="batch_code_img"  source="assets/icon_file.png" />
+		</s:BorderContainer>
+		<s:BorderContainer id="spec_code" backgroundColor="#2c3e50"  includeIn="Main_State" width="150" height="150" borderVisible="false"
+						   buttonMode="true" cornerRadius="5"
+						   mouseChildren="false" useHandCursor="true" toolTip="指定文件刷版本号">
+			<s:Image id="spec_code_img"  source="assets/icon_images.png" />
+		</s:BorderContainer>
+		<!--
+		<s:BorderContainer id="spec_code" includeIn="Main_State" width="150" height="150"
+						   backgroundColor="#8BC3E2" borderColor="#8BC3E2" borderVisible="true"
+						   buttonMode="true" click="currentState='SpecCode_State'" cornerRadius="5"
+						   mouseChildren="false" useHandCursor="true">
+			<s:layout>
+				<s:HorizontalLayout verticalAlign="middle" horizontalAlign="center"/>
+			</s:layout>
+			
+			<s:Label x="54" y="98" color="#969696" fontFamily="宋体" fontSize="12" text="指定文件刷版本号"/>
+		</s:BorderContainer>
+		-->
+		<s:TextInput id="bc_native_path" includeIn="BatchCode_State" width="250" height="40"
+					 borderColor="#FFFFFF" borderVisible="true" paddingBottom="5"
+					 paddingLeft="5" paddingRight="5" paddingTop="5"/>
+		<s:BorderContainer id="batch_file_select" backgroundColor="#3c9ddd"  includeIn="BatchCode_State"  width="40" height="40" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="请选择要批量处理的文件夹..."
+						   cornerRadius="2" click="clickForAllFileHanlder(event)" >
+			<s:Image source="assets/floder_ico.png" />
+		</s:BorderContainer>
+		
+		
+		<s:TextInput id="sc_native_path" includeIn="SpecCode_State" width="250" height="40"
+					 borderColor="#FFFFFF" borderVisible="true" paddingBottom="5"
+					 paddingLeft="5" paddingRight="5" paddingTop="5"/>
+		<s:BorderContainer id="spec_file_select" backgroundColor="#3c9ddd"  includeIn="SpecCode_State"  width="40" height="40" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="请选择要进行指定文件刷版本号处理的文件夹..."
+						   cornerRadius="2" click="clickForSpecHanlder(event)" >
+			<s:Image source="assets/floder_ico.png" />
+		</s:BorderContainer>
+
+	</s:HGroup>
+	<s:HGroup id="spc_menu" includeIn="SpecCode_State" height="200" gap="40" verticalAlign="middle">
+		<s:BorderContainer id="spec_drag"  includeIn="SpecCode_State"  width="150" height="150" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="请将图片文件拖放到这里..."
+						   cornerRadius="2" >
+			<s:Image backgroundColor="#2C3E50" source="assets/drag_icon.png"/>
+		</s:BorderContainer>
+		<s:VGroup width="200" height="100%" verticalAlign="middle">
+			<s:Label width="200" color="#4AA3DD" fontFamily="宋体" paddingBottom="6" paddingTop="6">要转换的文件列表</s:Label>
+			<s:List id="spc_file_list" width="200" height="120"></s:List>
+		</s:VGroup>
+		
+		<s:BorderContainer id="sc_confirm_tran" backgroundColor="#2C3E50" includeIn="SpecCode_State"  width="150" height="150" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="指定文件刷版本号"
+						   cornerRadius="2" click="confirmSpcTran(event)" >
+			<s:Image  source="assets/confirm_icon.png" />
+		</s:BorderContainer>
+		<!--
+		<s:TextArea id="spec_file_list" width="250" height="150" borderColor="#3B9CDD"
+					borderVisible="false" color="#B7E2FF" contentBackgroundColor="#3B9CDD"
+					text="等待刷版本号的文件列表："/>
+		-->
+	</s:HGroup>
+	
+	<s:HGroup gap.BatchCode_State="60" horizontalAlign.BatchCode_State="center"
+			  verticalAlign.BatchCode_State="middle">
+		<s:VGroup>
+			<s:Label includeIn="BatchCode_State" color="#4aa3dd" fontFamily="宋体" text="要添加版本号的文件列表"/>
+			<mx:DataGrid id="batch_tran_filelists" width="370" height="180" includeIn="BatchCode_State">
+				<mx:columns>
+					<mx:DataGridColumn headerText="文件路径" dataField="nativePath"/> 
+					<mx:DataGridColumn headerText="文件名" dataField="name"/>
+					<!--
+					<mx:DataGridColumn headerText="修改日期" dataField="modificationDate"/>
+					<mx:DataGridColumn headerText="文件大小" dataField="size"/>
+					<mx:DataGridColumn headerText="文件类型" dataField="type"/>
+					-->
+				</mx:columns>
+			</mx:DataGrid>
+		</s:VGroup>
+		
+		<s:BorderContainer id="bc_confirm_tran" backgroundColor="#2C3E50" includeIn="BatchCode_State"  width="150" height="150" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="批量文件刷版本号"
+						   cornerRadius="2" click="confirmBatchTran(event)" >
+			<s:Image  source="assets/confirm_icon.png" />
+		</s:BorderContainer>
+	</s:HGroup>
+	
+	
+	
+	
+	
+	<!--批处理文件底部导航-->
+	<s:HGroup gap="60">
+		
+		
+		<s:BorderContainer id="bc_return_home" backgroundColor="#2C3E50" includeIn="BatchCode_State"  width="60" height="60" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="返回主菜单"
+						   cornerRadius="2" click="currentState=''" >
+			<s:Image  source="assets/home_icon.png" />
+		</s:BorderContainer>
+		
+		
+		<s:BorderContainer id="sc_return_home" backgroundColor="#2C3E50" includeIn="SpecCode_State"  width="60" height="60" borderVisible="false"
+						   buttonMode="true" mouseChildren="false" useHandCursor="true" toolTip="返回主菜单"
+						   cornerRadius="2" click="currentState=''" >
+			<s:Image  source="assets/home_icon.png" />
+		</s:BorderContainer>
+		
+		
+	</s:HGroup>
+	<!--/批处理文件底部导航-->
+
+	
+	<!--//主页面内容-->
+	
+	
+	
+	
+	
+	<!--指定文件刷版本号  页面内容-->
+	
+	<!--//指定文件刷版本号 主页面内容-->
+</s:WindowedApplication>
